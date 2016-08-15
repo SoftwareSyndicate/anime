@@ -37,7 +37,8 @@
     round: false,
     begin: undefined,
     update: undefined,
-    complete: undefined
+    complete: undefined,
+    setters: {}
   }
 
   // Transforms
@@ -486,7 +487,7 @@
         switch (tween.type) {
           case 'css': target.style[name] = progress; break;
           case 'attribute': target.setAttribute(name, progress); break;
-          case 'object': target[name] = progress; break;
+          case 'object': anim.settings.setters.hasOwnProperty(name) ? target[anim.settings.setters[name]].call(target, progress) : target[name] = progress; break; // allow for setters with object properties
           case 'transform':
           if (!transforms) transforms = {};
           if (!transforms[id]) transforms[id] = [];
@@ -538,9 +539,37 @@
     return play;
   })();
 
-  var animation = function(params) {
+  var chain = function(params, cycles){
+    var oldComplete = this.settings.complete;
+    var anim;
+    var count = 1;
 
-    var anim = createAnimation(params);
+    if(params.hasOwnProperty('anime')){
+      // a previous animation was passed
+      // assume its setup to be stand alone
+      anim = params;
+    } else {
+      // if another target is not defined, use previous target
+      params.targets = params.targets || this.settings.targets;
+      params.setters = params.setters || this.settings.setters;
+
+      anim = createAnimation(params);
+      _addMethodsToAnimation(params,anim);
+    }
+
+    this.settings.complete = function(){
+      var cancel = oldComplete ? oldComplete.apply(null,arguments) : false;
+      if(cancel !== true && (cycles == null ? true : count < cycles)){
+        anim.play(params);
+        count++;
+      }
+    }
+
+    return anim;
+  }
+
+  var _addMethodsToAnimation = function(params, anim){
+
     var time = {};
 
     anim.tick = function(now) {
@@ -593,6 +622,18 @@
       anim.seek(0);
       anim.play();
     }
+
+    // add support for chaining
+    anim.anime = chain;
+
+    return anim;
+  }
+
+  var animation = function(params) {
+
+    var anim = createAnimation(params);
+
+    _addMethodsToAnimation(params,anim);
 
     if (anim.settings.autoplay) anim.play();
 
